@@ -1,5 +1,4 @@
-### FDR
-### High dimension linear model
+### FDR control for high-dimensional linear model
 rm(list = ls())
 library(MASS)
 library(glmnet)
@@ -12,45 +11,45 @@ n <- 500
 p <- 500
 p0 <- 50
 q <- 0.1
-rho <- 0.5
-delta <- as.numeric(Sys.getenv("att"))
-# replicate index
-replicate <- as.integer(Sys.getenv('SLURM_ARRAY_TASK_ID'))
-set.seed(replicate)
+rho <- 0.5 ### rho is the pairwise correlation between features
+delta <- 4 ### delta is the signal strength
 
-### constant correlation
+### pairwise constant correlation
 covariance <- rep(1, p)%*%t(rep(rho, p))
 diag(covariance) <- rep(1, p)
 X <- mvrnorm(n, mu = rep(0, p), Sigma = covariance)
 
-### randomly generate the true beta
+### generate the true regression coefficient
 beta_star <- rep(0, p)
 signal_index <- sample(c(1:p), size = p0, replace = F)
 beta_star[signal_index] <- rnorm(p0, mean = 0, sd = delta*sqrt(log(p)/n))
 
-### generate y
+### generate the response y
 y <- X%*%beta_star + rnorm(n, mean = 0, sd = 1)
 ### number of multiple splits
 num_split <- 50
 
-### find the threshold
-analys = function(mm, ww, q){
-  t_set = max(ww)
+### select the relevant features using mirror statistics
+analys <- function(mm, ww, q){
+  ### mm: mirror statistics
+  ### ww: absolute value of mirror statistics
+  ### q:  FDR control level
+  cutoff_set <- max(ww)
   for(t in ww){
-    ps = length(mm[mm>=t])
-    ng = length(na.omit(mm[mm<=-t]))
-    rto = (ng)/max(ps, 1)
-    if(rto<=q){
-      t_set = c(t_set, t)
+    ps <- length(mm[mm > t])
+    ng <- length(na.omit(mm[mm < -t]))
+    rto <- (ng)/max(ps, 1)
+    if(rto <= q){
+      cutoff_set <- c(cutoff_set, t)
     }
   }
-  thre = min(t_set)
-  nz_est = which(mm>thre)
-  nz_est
+  cutoff <- min(cutoff_set)
+  selected_fetaure_index <- which(mm > cutoff)
+  return(selected_feature_index)
 }
 
 
-DS = function(X, y, num_split, q){
+DS <- function(X, y, num_split, q){
   n = dim(X)[1]; p = dim(X)[2]
   inclusion_rate_multiple <- matrix(0, nrow = num_split, ncol = p)
   fdr_multiple <- rep(0, num_split)

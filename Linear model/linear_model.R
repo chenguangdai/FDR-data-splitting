@@ -148,7 +148,7 @@ F_knockoff <- function(X, y, q){
   selected_index <- nonzero_index[sort(which(M >= cutoff))]
   inc <- intersect(signal_index, selected_index)
   td <- length(inc)
-  fdp <- (length(nz_est) - td)/max(length(nz_est), 1)
+  fdp <- (length(selected_index) - td)/max(length(selected_index), 1)
   power <- td/length(signal_index)
   list(fdp = fdp, power = power)
 }

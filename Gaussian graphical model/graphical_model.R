@@ -183,7 +183,7 @@ BH_BY <- function(data, q){
   harmonic_sum = sum(1/(1:(p*(p-1)/2)))
   
   ### get pvalues
-  pvalues <- c(NULL)
+  pvalues <- NULL
   for(i in 2:p){
     for(j in 1:(i-1)){
       pvalues = suppressWarnings(c(pvalues, pcor.test(data[, i], data[, j], data[, -c(i,j)])$p.value))

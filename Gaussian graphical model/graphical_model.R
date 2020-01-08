@@ -222,6 +222,7 @@ BH_BY <- function(data, q){
 }
 
 
+### test out different methods
 BH_BY_result <- BH_BY(data, q)
 DS_result <- DS(data, q, num_split)
 GFC_result <- GFC(data, precision, q)

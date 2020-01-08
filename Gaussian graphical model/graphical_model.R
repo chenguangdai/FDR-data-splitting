@@ -159,7 +159,7 @@ DS <- function(data, q, num_split){
   fdp_power_result <- fdp_power(DS_selected_edge)
   DS_fdp <- fdp_power_result$fdp
   DS_power <- fdp_power_result$power
-  ##### multiple data-splitting fdp and power
+  ### multiple data-splitting fdp and power
   fdp_power_result <- fdp_power(MDS_selected_edge)
   MDS_fdp <- fdp_power_result$fdp
   MDS_power <- fdp_power_result$power
@@ -168,7 +168,7 @@ DS <- function(data, q, num_split){
 }
 
 
-##### GFC-L and GFC-SL (Liu et al 2013)
+### GFC-L and GFC-SL (Liu et al 2013)
 GFC <- function(data, precision, q){
   fit1 <- SILGGM(data, method = 'GFC_L',  true_graph = precision, alpha = q)
   fit2 <- SILGGM(data, method = 'GFC_SL', true_graph = precision, alpha = q)

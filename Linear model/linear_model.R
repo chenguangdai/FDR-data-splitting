@@ -44,9 +44,18 @@ analys <- function(mm, ww, q){
     }
   }
   cutoff <- min(cutoff_set)
-  selected_fetaure_index <- which(mm > cutoff)
-  return(selected_feature_index)
+  selected_index <- which(mm > cutoff)
+  return(selected_index)
 }
+
+
+### calculate fdp and power
+fdp_power <- function(selected_index){
+  fdp <- (length(selected_index) - length(intersect(selected_index, signal_index)))/max(length(selected_index), 1)
+  power <- length(intersect(selected_index, signal_index))/length(signal_index)
+  return(fdp = fdp, power = power)
+}
+
 
 ### data-splitting methods (DS and MDS)
 DS <- function(X, y, num_split, q){
@@ -75,15 +84,15 @@ DS <- function(X, y, num_split, q){
     ### number of selected variables
     num_select[iter] <- length(selected_index)
     inclusion_rate[iter, selected_index] <- 1/num_select[iter]
-    ### false discovery proportion
-    fdp[iter] <- (length(selected_index) - length(intersect(selected_index, signal_index)))/num_select[iter]
-    ### power
-    power[iter] <- length(intersect(selected_index, signal_index))/p0
+    ### calculate fdp and power
+    fdp_power_result <- fdp_power(selected_index)
+    fdp[iter] <- fdp_power_result$fdp
+    power[iter] <- fdp_power_result$power
   }
   
   ### single data-splitting (DS) result
-  single_split_fdp <- fdp[1]
-  single_split_power <- power[1]
+  DS_fdp <- fdp[1]
+  DS_power <- power[1]
   
   ### multiple data-splitting (MDS) result
   inclusion_rate <- apply(inclusion_rate, 2, mean)
@@ -100,20 +109,23 @@ DS <- function(X, y, num_split, q){
     }
   }
   selected_index <- setdiff(feature_rank, null_feature)
-  multiple_split_fdp <- (length(selected_index) - length(intersect(selected_index, signal_index)))/length(selected_index)
-  multiple_split_power <- length(intersect(selected_index, signal_index))/p0
+  ### calculate fdp and power
+  fdp_power_result <- fdp_power(selected_index)
+  MDS_fdp <- fdp_power_result$fdp
+  MDS_power <- fdp_power_result$power
   
-  list(DS_fdp = single_split_fdp, DS_power = single_split_power, MDS_fdp = multiple_split_fdp, MDS_power = multiple_split_power)
+  list(DS_fdp = DS_fdp, DS_power = DS_power, MDS_fdp = MDS_fdp, MDS_power = MDS_power)
 }
 
 ### model-X knockoff filter (Candes et al. 2018)
 M_knockoff <- function(X, y, q){
   knockoff_result <- knockoff.filter(X, y, fdr = q, offset = 0)
   selected_index <- knockoff_result$selected
-  ### false discovery rate
-  knockoff_fdp <- (length(selected_index) - length(intersect(selected_index, signal_index)))/length(selected_index)
-  ### power
-  knockoff_power <- length(intersect(selected_index, signal_index))/p0
+  
+  ### calculate fdp and power
+  fdp_power_result <- fdp_power(selected_index)
+  knockoff_fdp <- fdp_power_result$fdp
+  knockoff_power <- fdp_power_result$power
   list(fdp = knockoff_fdp, power = knockoff_power)
 }
 
@@ -146,15 +158,15 @@ F_knockoff <- function(X, y, q){
   M <- stat.glmnet_coefdiff(X, X_tilde, y)
   cutoff <- knockoff.threshold(M, fdr = q, offset = 0)
   selected_index <- nonzero_index[sort(which(M >= cutoff))]
-  inc <- intersect(signal_index, selected_index)
-  td <- length(inc)
-  fdp <- (length(selected_index) - td)/max(length(selected_index), 1)
-  power <- td/length(signal_index)
+  ### calculate fdp and power
+  fdp_power_result <- fdp_power(selected_index)
+  fdp <- fdp_power_result$fdp
+  power <- fdp_power_result$power
   list(fdp = fdp, power = power)
 }
 
 
-BH_and_BY_single = function(X, y, q){
+BH_and_BY_single <- function(X, y, q){
   #### get penalty lambda
   cvfit <- cv.glmnet(X, y, type.measure = "mse", nfolds = 10)
   lambda <- cvfit$lambda.1se
@@ -169,54 +181,48 @@ BH_and_BY_single = function(X, y, q){
   pvalues <- summary(fit)$coefficients[, 4]
   
   #### BH and BY procedure
-  total = sum(1/(1:length(nonzero_index)))
-  sorted_pvalues = sort(pvalues, decreasing = F, index.return = T)
+  harmonic_sum <- sum(1/(1:length(nonzero_index)))
+  sorted_pvalues <- sort(pvalues, decreasing = F, index.return = T)
   
-  BH_index = max(which(sorted_pvalues$x<=(1:length(nonzero_index))*q/length(nonzero_index)))
-  BY_index = max(which(sorted_pvalues$x<=(1:length(nonzero_index))*q/(length(nonzero_index)*total)))
-  nz_est_BH = nonzero_index[sorted_pvalues$ix[1:BH_index]]
-  nz_est_BY = nonzero_index[sorted_pvalues$ix[1:BY_index]]
+  BH_cutoff <- max(which(sorted_pvalues$x <= (1:length(nonzero_index))*q/length(nonzero_index)))
+  BY_cutoff <- max(which(sorted_pvalues$x <= (1:length(nonzero_index))*q/(length(nonzero_index)*harmonic_sum)))
+  BH_selected_index <- nonzero_index[sorted_pvalues$ix[1:BH_cutoff]]
+  BY_selected_index <- nonzero_index[sorted_pvalues$ix[1:BY_cutoff]]
   
-  ### calculate fdr and power
-  BH_inc = intersect(signal_index, nz_est_BH)
-  BH_td = length(BH_inc)
-  BH_fdr = (length(nz_est_BH) - BH_td)/max(length(nz_est_BH), 1)
-  BH_power = BH_td/length(signal_index)
+  ### calculate fdp and power
+  BH_fdp_power_result <- fdp_power(BH_selected_index)
+  BH_fdp <- BH_fdp_power_result$fdp
+  BH_power <- BH_fdp_power_result$power
+  BY_fdp_power_result <- fdp_power(BY_selected_index)
+  BY_fdp <- BY_fdp_power_result$fdp
+  BY_power <- BY_fdp_power_result$power
   
-  BY_inc = intersect(signal_index, nz_est_BY)
-  BY_td = length(BY_inc)
-  BY_fdr = (length(nz_est_BY) - BY_td)/max(length(nz_est_BY), 1)
-  BY_power = BY_td/length(signal_index)  
-  
-  return(list(BH_fdr = BH_fdr, BH_power = BH_power, BY_fdr = BY_fdr, BY_power = BY_power))
+  return(list(BH_fdp = BH_fdp, BH_power = BH_power, BY_fdp = BY_fdp, BY_power = BY_power))
 }
 
-BH_and_BY_multiple = function(X, y, q, num_split){
-  multi_fit = multi.split(X, y, B = num_split)
-  pvalues = multi_fit$pval.corr
-  sorted_pvalues = sort(pvalues, decreasing = F, index.return = T)
-  first_selection = which(sorted_pvalues$x<1)
-  total = sum(1/(1:length(first_selection)))
-  BH_index = max(which(sorted_pvalues$x[first_selection]<=(1:length(first_selection))*q))
-  BY_index = max(which(sorted_pvalues$x[first_selection]<=(1:length(first_selection))*q/total))
-  nz_est_BH_multiple = sorted_pvalues$ix[1:BH_index]
-  nz_est_BY_multiple = sorted_pvalues$ix[1:BY_index]
+BH_and_BY_multiple <- function(X, y, q, num_split){
+  multi_fit <- multi.split(X, y, B = num_split)
+  pvalues <- multi_fit$pval.corr
+  sorted_pvalues <- sort(pvalues, decreasing = F, index.return = T)
+  selected_index <- which(sorted_pvalues$x < 1)
+  harmonic_sum <- sum(1/(1:length(selected_index)))
+  BH_cutoff <- max(which(sorted_pvalues$x[selected_index] <= (1:length(selected_index))*q))
+  BY_cutoff <- max(which(sorted_pvalues$x[selected_index] <= (1:length(selected_index))*q/harmonic_sum))
+  BH_selected_index <- sorted_pvalues$ix[1:BH_cutoff]
+  BY_selected_index <- sorted_pvalues$ix[1:BY_cutoff]
   
-  BH_inc = intersect(signal_index, nz_est_BH_multiple)
-  BH_td = length(BH_inc)
-  BH_fdr = (length(nz_est_BH_multiple) - BH_td)/max(length(nz_est_BH_multiple), 1)
-  BH_power = BH_td/length(signal_index)
+  ### calculate fdp and power
+  BH_fdp_power_result <- fdp_power(BH_selected_index)
+  BH_fdp <- BH_fdp_power_result$fdp
+  BH_power <- BH_fdp_power_result$power
+  BY_fdp_power_result <- fdp_power(BY_selected_index)
+  BY_fdp <- BY_fdp_power_result$fdp
+  BY_power <- BY_fdp_power_result$power
   
-  BY_inc = intersect(signal_index, nz_est_BY_multiple)
-  BY_td = length(BY_inc)
-  BY_fdr = (length(nz_est_BY_multiple) - BY_td)/max(length(nz_est_BY_multiple), 1)
-  BY_power = BY_td/length(signal_index)
-  return(list(BH_fdr = BH_fdr, BH_power = BH_power, BY_fdr = BY_fdr, BY_power = BY_power))
+  return(list(BH_fdp = BH_fdp, BH_power = BH_power, BY_fdp = BY_fdp, BY_power = BY_power))
 }
 
-
-
-###
+### test out different methods
 DS_result <- DS(X,y, num_split, q)
 knockoff_result <- KN(X, y, q)
 BH_result <- BH_and_BY_single(X, y, q)

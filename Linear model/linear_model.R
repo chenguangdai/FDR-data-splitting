@@ -155,7 +155,7 @@ F_knockoff <- function(X, y, q){
   y2 <- y[sample_index2]
   y <- c(y1, y2)
   
-  M <- stat.glmnet_coefdiff(X, X_tilde, y)
+  M <- stat.glmnet_coefdiff(X, X_knockoff, y)
   cutoff <- knockoff.threshold(M, fdr = q, offset = 0)
   selected_index <- nonzero_index[sort(which(M >= cutoff))]
   ### calculate fdp and power

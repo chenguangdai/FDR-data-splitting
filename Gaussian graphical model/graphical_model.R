@@ -151,7 +151,7 @@ DS <- function(data, q, num_split){
       }
     }
     selected_index <- rep(0, p - 1)
-    selected_index[setdiff(feature_rank, null_variable)] = 1
+    selected_index[setdiff(feature_rank, null_feature)] = 1
     MDS_selected_edge[j, -j] <- selected_index
   }
   

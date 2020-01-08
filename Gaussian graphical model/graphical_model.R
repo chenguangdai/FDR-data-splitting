@@ -85,7 +85,7 @@ fdp_power <- function(selected_edge){
       if(selected_edge[i, j] == 1 | selected_edge[j, i] == 1){
         num_selected_edge <- num_selected_edge + 1
         if(edges_set[i, j] == 0){
-          num_false_discoveries <- false_discoveries + 1
+          num_false_discoveries <- num_false_discoveries + 1
         }
       }
     }

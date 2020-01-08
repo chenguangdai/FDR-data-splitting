@@ -53,7 +53,7 @@ analys <- function(mm, ww, q){
 fdp_power <- function(selected_index){
   fdp <- (length(selected_index) - length(intersect(selected_index, signal_index)))/max(length(selected_index), 1)
   power <- length(intersect(selected_index, signal_index))/length(signal_index)
-  return(fdp = fdp, power = power)
+  return(list(fdp = fdp, power = power))
 }
 
 
@@ -114,7 +114,7 @@ DS <- function(X, y, num_split, q){
   MDS_fdp <- fdp_power_result$fdp
   MDS_power <- fdp_power_result$power
   
-  list(DS_fdp = DS_fdp, DS_power = DS_power, MDS_fdp = MDS_fdp, MDS_power = MDS_power)
+  return(list(DS_fdp = DS_fdp, DS_power = DS_power, MDS_fdp = MDS_fdp, MDS_power = MDS_power))
 }
 
 ### model-X knockoff filter (Candes et al. 2018)
@@ -126,7 +126,7 @@ M_knockoff <- function(X, y, q){
   fdp_power_result <- fdp_power(selected_index)
   knockoff_fdp <- fdp_power_result$fdp
   knockoff_power <- fdp_power_result$power
-  list(fdp = knockoff_fdp, power = knockoff_power)
+  return(list(fdp = knockoff_fdp, power = knockoff_power))
 }
 
 ### fixed-design knockoff filter based on data splitting and data recycling (Barbers and Candes 2019)
@@ -162,11 +162,11 @@ F_knockoff <- function(X, y, q){
   fdp_power_result <- fdp_power(selected_index)
   fdp <- fdp_power_result$fdp
   power <- fdp_power_result$power
-  list(fdp = fdp, power = power)
+  return(list(fdp = fdp, power = power))
 }
 
 
-BH_and_BY_single <- function(X, y, q){
+BH_BY_single <- function(X, y, q){
   #### get penalty lambda
   cvfit <- cv.glmnet(X, y, type.measure = "mse", nfolds = 10)
   lambda <- cvfit$lambda.1se
@@ -200,7 +200,7 @@ BH_and_BY_single <- function(X, y, q){
   return(list(BH_fdp = BH_fdp, BH_power = BH_power, BY_fdp = BY_fdp, BY_power = BY_power))
 }
 
-BH_and_BY_multiple <- function(X, y, q, num_split){
+BH_BY_multiple <- function(X, y, q, num_split){
   multi_fit <- multi.split(X, y, B = num_split)
   pvalues <- multi_fit$pval.corr
   sorted_pvalues <- sort(pvalues, decreasing = F, index.return = T)
@@ -223,9 +223,10 @@ BH_and_BY_multiple <- function(X, y, q, num_split){
 }
 
 ### test out different methods
-DS_result <- DS(X,y, num_split, q)
-knockoff_result <- KN(X, y, q)
-BH_result <- BH_and_BY_single(X, y, q)
-BH_multiple_result <- BH_and_BY_multiple(X, y, q, num_split)
-knockoff_split_result <- KN_hdi(X, y, q)
+DS_result <- DS(X, y, num_split, q)
+M_knockoff_result <- M_knockoff(X, y, q)
+F_knockoff_result <- F_knockoff(X, y, q)
+BH_BY_single_result <- BH_BY_single(X, y, q)
+BH_BY_multiple_result <- BH_BY_multiple(X, y, q, num_split)
+
 

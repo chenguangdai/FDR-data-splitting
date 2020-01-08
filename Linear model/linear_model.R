@@ -165,7 +165,7 @@ F_knockoff <- function(X, y, q){
   return(list(fdp = fdp, power = power))
 }
 
-
+### BHq and BYq based on a single data split
 BH_BY_single <- function(X, y, q){
   #### get penalty lambda
   cvfit <- cv.glmnet(X, y, type.measure = "mse", nfolds = 10)
@@ -200,6 +200,8 @@ BH_BY_single <- function(X, y, q){
   return(list(BH_fdp = BH_fdp, BH_power = BH_power, BY_fdp = BY_fdp, BY_power = BY_power))
 }
 
+
+### BHq and BYq based on multiple data splits (Meinshausen et al. 2009)
 BH_BY_multiple <- function(X, y, q, num_split){
   multi_fit <- multi.split(X, y, B = num_split)
   pvalues <- multi_fit$pval.corr

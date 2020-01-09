@@ -1,3 +1,4 @@
+### FDR control for deep neural networks
 import torch
 import torchvision
 from torch import nn
@@ -15,30 +16,51 @@ import warnings
 warnings.filterwarnings("ignore", message = "Numerical issues were encountered ")
 
 dtype = torch.float
+### number of true features
 nz = 30
-batch_size = 128
+### number of features
 pset = [500, 1000, 1500, 2000, 3000]
+### sample size
 n = 1000
-sg = 0.65
-epochs = 500
+### signal strength for the power function and the exponential function
+sg = 20*np.sqrt(np.log(p)/n)
+### noise level for the power function
+ns = 1
+### noise level for the exponential function and the sigmoid function
+# ns = 0.1
+### pairwise correlation between features
 rho = 0.5
+### FDR control level
 q = 0.1
 num_split = 50
-replicate = int(os.getenv('SLURM_ARRAY_TASK_ID'))
-np.random.seed(replicate)
+### algorithmic settings for training dnn
+epochs = 500
+batch_size = 128
+learning_rate = 1e-3
 
-def f(x):
-  op = x**3/2
-  return op
+### link function of the single-index model
+### power function
+def f(t):
+  return t**3/2
+### exponential function
+def f(t):
+	return np.exp(t/10)
+### sigmoid function
+def f(t):
+	return 1/(1 + np.exp(-t))
 
 
+### generate data
 def grt(n, p, nz, Sigma):      
+    ### sample the true feature index
     nonzero = random.sample(range(0, p), nz)
     zero = np.setdiff1d(range(0, p), nonzero)
     beta = np.zeros(p)
     for nzr in nonzero:
-        beta[nzr] = np.random.randn(1)*20*np.sqrt(np.log(p)/n)
-        # beta[nzr] = sg*np.random.choice([-1, 1])
+        ### beta for the power function and the exponential function
+        beta[nzr] = sg * np.random.randn(1)
+        ### beta for the sigmoid function
+        # beta[nzr] = np.random.uniform(0.5, 1)
     x_train = np.mat(np.random.multivariate_normal(mean = np.zeros(p), cov = Sigma, size = n))
     x_train = x_train.astype('float32')
     x_train = preprocessing.scale(x_train)
@@ -46,7 +68,8 @@ def grt(n, p, nz, Sigma):
 
     return z_train, nonzero, zero, x_train
 
-
+  
+### calculate the mirror statistics: the influence function approach
 def get_m(model1, model2, x_train1, x_train2):
     w1, w2 = 0, 0
 
@@ -74,29 +97,42 @@ def get_m(model1, model2, x_train1, x_train2):
     return M
 
 
-def analys(mm,ww, q):
-    ### calculate the selection threshold tau_q
-    t_set = np.array([max(ww)])
+### calculate the mirror statistics: the weight multiplication approach
+def get_weight(model):
+    w1 = list(model.parameters())[0].detach().numpy()
+    w2 = list(model.parameters())[2].detach().numpy()
+    w3 = list(model.parameters())[4].detach().numpy()
+
+    return np.dot(np.dot(w3, w2), w1)
+
+ 
+### select the relevant features using mirror statistics
+def analys(mm, ww, q):
+    ### mm: mirror statistics
+    ### ww: absolute value of mirror statistics
+    ### q:  FDR control level
+    cutoff_set = np.array([max(ww)])
     for t in ww:
-        ps = len(mm[mm >= t])
-        ng = len(mm[mm <= -t])
-        rto = (float(ng+1)) / max(ps, 1)
+        ps = len(mm[mm > t])
+        ng = len(mm[mm < -t])
+        rto = (float(ng)) / max(ps, 1)
         if rto < q:
-            t_set = np.append(t_set, t)
-    thre = min(t_set)
+            cutoff_set = np.append(cutoff_set, t)
+    cutoff = min(cutoff_set)
 
-    nz_est = np.where(mm >= thre)
-    nz_est = list(nz_est)
-    nz_est = nz_est[0]
+    selected_index = np.where(mm > cutoff)
+    selected_index = list(selected_index)
+    selected_index = selected_index[0]
 
-    return nz_est
+    return selected_index
 
 
-def fdp_power(nz_est):
-    inc = np.intersect1d(nonzero, nz_est)
+### calculate fdp and power
+def fdp_power(selected_index):
+    inc = np.intersect1d(nonzero, selected_index)
     td = len(inc)
 
-    fdp = float(len(nz_est) - td) / max(len(nz_est),1)
+    fdp = float(len(selected_index) - td) / max(len(selected_index),1)
     power = float(td) / nz
 
     return fdp, power
@@ -133,8 +169,8 @@ class Net(nn.Module):
             return self.fw(x)
 
 
-def Split(X, z, q):
-    selected_index_multiple = np.zeros((num_split, p))
+def DS(X, z, q):
+    inclusion_rate = np.zeros((num_split, p))
     num_select = [0]*num_split
 
     for it in range(num_split):
@@ -147,7 +183,7 @@ def Split(X, z, q):
         optimizer1 = torch.optim.Adam(
         model1.parameters(), lr = learning_rate, weight_decay = 1e-5)
         criterion = nn.MSELoss()
-        x_train1 = torch.tensor(X[:int(n/2), :], dtype = dtype)
+        x_train1 = torch.tensor(X[:int(n/2),:], dtype = dtype)
         z_train1 = torch.tensor(z[:int(n/2)], dtype = dtype)
         dataset1 = Dataset(x_train1, z_train1)
         dataloader1 = DataLoader(dataset1, batch_size = batch_size, shuffle = True)
@@ -169,7 +205,7 @@ def Split(X, z, q):
         model2 = Net()
         optimizer2 = torch.optim.Adam(
         model2.parameters(), lr = learning_rate, weight_decay = 1e-5)
-        x_train2 = torch.tensor(X[int(n/2):, :], dtype = dtype)
+        x_train2 = torch.tensor(X[int(n/2):,:], dtype = dtype)
         z_train2 = torch.tensor(z[int(n/2):], dtype = dtype)
         dataset2 = Dataset(x_train2, z_train2)
         dataloader2 = DataLoader(dataset2, batch_size = batch_size, shuffle = True)
@@ -188,10 +224,10 @@ def Split(X, z, q):
                 optimizer2.step()
 
     
-        ### mirror statistics 1: influence function
+        ### mirror statistics: influence function
         m = get_m(model1, model2, x_train1, x_train2)
 
-        ### mirror statistics 2: weight multiplication
+        ### mirror statistics: weight multiplication
         # w1 = get_weight(model1)
         # w2 = get_weight(model2)
         # M = np.abs(w1+w2)-np.abs(w1-w2)
@@ -199,26 +235,23 @@ def Split(X, z, q):
 
         selected_index = analys(m, abs(m), q)
         if it == 0:
-            single_selected_index = selected_index
+            DS_selected_index = selected_index
         num_select[it] = len(selected_index)
         if num_select[it] != 0:
-            selected_index_multiple[it, selected_index] = selected_index_multiple[it, selected_index] + 1 / num_select[it]
+            inclusion_rate[it, selected_index] = 1 / num_select[it]
 
-        
-    feature_rank = np.argsort(np.sum(selected_index_multiple, axis = 0))
-    null_variable = []
-    fdr_replicate = [0]*num_split
+    ### backtracking   
+    inclusion_rate = np.mean(inclusion_rate, axis = 0)
+    feature_rank = np.argsort(inclusion_rate)
+    null_feature = []
     for feature_index in range(len(feature_rank)):
-        for split_index in range(num_split):
-            if selected_index_multiple[split_index, feature_rank[feature_index]]:
-                fdr_replicate[split_index] = fdr_replicate[split_index] + 1/num_select[split_index]
-        if np.mean(fdr_replicate) > q:
+        if np.sum(inclusion_rate[feature_rank[:feature_index]]) > q:
             break
         else:
-            null_variable.append(feature_rank[feature_index])
-    multiple_selected_index = np.setdiff1d(feature_rank, null_variable)
+            null_feature.append(feature_rank[feature_index])
+    MDS_selected_index = np.setdiff1d(feature_rank, null_feature)
     
-    return [single_selected_index, multiple_selected_index]
+    return [DS_selected_index, MDS_selected_index]
 
 
 
@@ -227,6 +260,7 @@ DS_FDP, MDS_FDP = [], []
 DS_POWER, MDS_POWER = [], []
 for p in pset:
     ### L1-regularization magnitude
+    ### power function: 1.0; exponential function: 0.01; sigmoid function: 0.01
     c = 1.0*math.sqrt(math.log(p)/n)
     ### neural network structure
     Hidden = [int(20*math.log(p)), int(10*math.log(p))]
@@ -252,20 +286,14 @@ for p in pset:
     #     Sigma[i,i] = 1
 
     z_train_original, nonzero, zero, x_train = grt(n = n, p = p, nz = nz, Sigma = Sigma)
-    z_train = f(z_train_original) + np.random.randn(n)
-    learning_rate = 1e-3
-    single_selected_index, multiple_selected_index = Split(x_train, z_train, q)
-    ds_fdp, ds_power = fdp_power(single_selected_index)
-    mds_fdp, mds_power = fdp_power(multiple_selected_index)
+    z_train = f(z_train_original) + np.random.randn(n)*ns
+    DS_selected_index, MDS_selected_index = DS(x_train, z_train, q)
+    ds_fdp, ds_power = fdp_power(DS_selected_index)
+    mds_fdp, mds_power = fdp_power(MDS_selected_index)
     DS_FDP.append(ds_fdp)
     DS_POWER.append(ds_power)
     MDS_FDP.append(mds_fdp)
     MDS_POWER.append(mds_power)
 
-
-np.savetxt('/n/home09/cdai/FDR/nn/mds/result/f1/influence/single/' + 'DS_FDP_%d'%replicate, DS_FDP, delimiter = ',')
-np.savetxt('/n/home09/cdai/FDR/nn/mds/result/f1/influence/single/' + 'DS_POWER_%d'%replicate, DS_POWER, delimiter = ',')
-np.savetxt('/n/home09/cdai/FDR/nn/mds/result/f1/influence/multiple/' + 'MDS_FDP_%d'%replicate, MDS_FDP, delimiter = ',')
-np.savetxt('/n/home09/cdai/FDR/nn/mds/result/f1/influence/multiple/' + 'MDS_POWER_%d'%replicate, MDS_POWER, delimiter = ',')
 
 

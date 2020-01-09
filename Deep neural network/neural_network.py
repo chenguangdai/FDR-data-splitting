@@ -22,8 +22,6 @@ nz = 30
 pset = [500, 1000, 1500, 2000, 3000]
 ### sample size
 n = 1000
-### signal strength for the power function and the exponential function
-sg = 20*np.sqrt(np.log(p)/n)
 ### noise level for the power function
 ns = 1
 ### noise level for the exponential function and the sigmoid function
@@ -58,6 +56,7 @@ def grt(n, p, nz, Sigma):
     beta = np.zeros(p)
     for nzr in nonzero:
         ### beta for the power function and the exponential function
+        sg = 20*np.sqrt(np.log(p)/n)
         beta[nzr] = sg * np.random.randn(1)
         ### beta for the sigmoid function
         # beta[nzr] = np.random.uniform(0.5, 1)

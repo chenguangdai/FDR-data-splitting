@@ -17,7 +17,7 @@ delta <- 4 ### delta is the signal strength
 ### pairwise constant correlation
 covariance <- rep(1, p)%*%t(rep(rho, p))
 diag(covariance) <- rep(1, p)
-X <- rmvnorm(n, mu = rep(0, p), Sigma = covariance)
+X <- rmvnorm(n, mean = rep(0, p), sigma = covariance)
 
 ### generate the true regression coefficient
 beta_star <- rep(0, p)
